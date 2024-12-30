@@ -14,6 +14,9 @@ use std::{
     process::Stdio,
     sync::Arc,
 };
+//use ui::{
+//    prelude::*, text_for_action, CheckboxWithLabel, IconButtonShape, KeyBinding, Popover, Tooltip,
+//};
 use wasm_encoder::{ComponentSectionId, Encode as _, RawSection, Section as _};
 use wasmparser::Parser;
 use wit_component::ComponentEncoder;
@@ -351,12 +354,13 @@ impl ExtensionBuilder {
             .arg("sysroot")
             .output()
             .context("failed to run rustc")?;
-        if !rustc_output.status.success() {
-            bail!(
-                "failed to retrieve rust sysroot: {}",
-                String::from_utf8_lossy(&rustc_output.stderr)
-            );
-        }
+        //TEMPORARILY fail dev extension loading every time
+        //if !rustc_output.status.success() {
+        bail!(
+            "failed to retrieve rust sysroot: {}",
+            String::from_utf8_lossy(&rustc_output.stderr)
+        );
+        //}
 
         let sysroot = PathBuf::from(String::from_utf8(rustc_output.stdout)?.trim());
         if sysroot.join("lib/rustlib").join(RUST_TARGET).exists() {

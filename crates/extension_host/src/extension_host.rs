@@ -128,6 +128,7 @@ pub enum ExtensionOperation {
 pub enum Event {
     ExtensionsUpdated,
     StartedReloading,
+    ExtensionInstalling,
     ExtensionInstalled(Arc<str>),
     ExtensionFailedToLoad(Arc<str>),
 }
@@ -828,7 +829,9 @@ impl ExtensionStore {
             let mut extension_manifest =
                 ExtensionManifest::load(fs.clone(), &extension_source_path).await?;
             let extension_id = extension_manifest.id.clone();
-
+            this.update(&mut cx, |_, cx| {
+                cx.emit(Event::ExtensionInstalling);
+            })?;
             if !this.update(&mut cx, |this, cx| {
                 match this.outstanding_operations.entry(extension_id.clone()) {
                     btree_map::Entry::Occupied(_) => return false,

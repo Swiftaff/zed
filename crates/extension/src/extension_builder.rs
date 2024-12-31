@@ -14,9 +14,6 @@ use std::{
     process::Stdio,
     sync::Arc,
 };
-//use ui::{
-//    prelude::*, text_for_action, CheckboxWithLabel, IconButtonShape, KeyBinding, Popover, Tooltip,
-//};
 use wasm_encoder::{ComponentSectionId, Encode as _, RawSection, Section as _};
 use wasmparser::Parser;
 use wit_component::ComponentEncoder;
@@ -80,6 +77,7 @@ impl ExtensionBuilder {
         extension_manifest: &mut ExtensionManifest,
         options: CompileExtensionOptions,
     ) -> Result<()> {
+        dbg!("compile_extension");
         populate_defaults(extension_manifest, extension_dir)?;
 
         if extension_dir.is_relative() {
@@ -123,6 +121,7 @@ impl ExtensionBuilder {
         manifest: &mut ExtensionManifest,
         options: CompileExtensionOptions,
     ) -> Result<(), anyhow::Error> {
+        dbg!("compile_rust_extension");
         self.install_rust_wasm_target_if_needed()?;
         let adapter_bytes = self.install_wasi_preview1_adapter_if_needed().await?;
 
@@ -349,18 +348,20 @@ impl ExtensionBuilder {
     }
 
     fn install_rust_wasm_target_if_needed(&self) -> Result<()> {
+        dbg!("install_rust_wasm_target_if_needed");
         let rustc_output = util::command::new_std_command("rustc")
             .arg("--print")
             .arg("sysroot")
             .output()
             .context("failed to run rustc")?;
-        //TEMPORARILY fail dev extension loading every time
-        //if !rustc_output.status.success() {
-        bail!(
-            "failed to retrieve rust sysroot: {}",
-            String::from_utf8_lossy(&rustc_output.stderr)
-        );
-        //}
+        //TEMPORARY TEST - fail dev extension loading
+        //if !rustc_output.status.success()
+        {
+            bail!(
+                "failed to retrieve rust sysroot: {}",
+                String::from_utf8_lossy(&rustc_output.stderr)
+            );
+        }
 
         let sysroot = PathBuf::from(String::from_utf8(rustc_output.stdout)?.trim());
         if sysroot.join("lib/rustlib").join(RUST_TARGET).exists() {

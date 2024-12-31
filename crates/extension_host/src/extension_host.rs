@@ -128,7 +128,9 @@ pub enum ExtensionOperation {
 pub enum Event {
     ExtensionsUpdated,
     StartedReloading,
-    ExtensionInstalling,
+    DevExtensionInstalling(Arc<str>),
+    DevExtensionInstallFail(Arc<str>),
+    DevExtensionInstallSuccess,
     ExtensionInstalled(Arc<str>),
     ExtensionFailedToLoad(Arc<str>),
 }
@@ -821,16 +823,28 @@ impl ExtensionStore {
         extension_source_path: PathBuf,
         cx: &mut ModelContext<Self>,
     ) -> Task<Result<()>> {
+        dbg!("install_dev_extension");
         let extensions_dir = self.extensions_dir();
         let fs = self.fs.clone();
         let builder = self.builder.clone();
 
         cx.spawn(move |this, mut cx| async move {
             let mut extension_manifest =
-                ExtensionManifest::load(fs.clone(), &extension_source_path).await?;
+                ExtensionManifest::load(fs.clone(), &extension_source_path)
+                    .await
+                    .or_else(|e| {
+                        this.update(&mut cx, |_, cx| {
+                            let arc_string = Arc::new("ERROR: invalid manifest".to_string());
+                            let arc_str: Arc<str> = Arc::from((&*arc_string).to_string());
+                            cx.emit(Event::DevExtensionInstallFail(arc_str));
+                        })?;
+                        Err(e)
+                    })?;
+
             let extension_id = extension_manifest.id.clone();
             this.update(&mut cx, |_, cx| {
-                cx.emit(Event::ExtensionInstalling);
+                let arc_str: Arc<str> = extension_manifest.id.clone();
+                cx.emit(Event::DevExtensionInstalling(arc_str));
             })?;
             if !this.update(&mut cx, |this, cx| {
                 match this.outstanding_operations.entry(extension_id.clone()) {
@@ -869,7 +883,14 @@ impl ExtensionStore {
                             .await
                     }
                 })
-                .await?;
+                .await
+                .or_else(|e| {
+                    this.update(&mut cx, |_, cx| {
+                        let arc_str: Arc<str> = Arc::from(e.to_string());
+                        cx.emit(Event::DevExtensionInstallFail(arc_str));
+                    })?;
+                    Err(e)
+                })?;
 
             let output_path = &extensions_dir.join(extension_id.as_ref());
             if let Some(metadata) = fs.metadata(output_path).await? {

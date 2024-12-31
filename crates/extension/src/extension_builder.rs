@@ -351,7 +351,11 @@ impl ExtensionBuilder {
             .arg("sysroot")
             .output()
             .context("failed to run rustc")?;
-        if !rustc_output.status.success() {
+        if !rustc_output.status.success()
+        //TEMPORARY TESTS
+        //Comment out above line to fail dev extension loading.
+        //Or, add an invalid key to your dev extension.toml to cause a separate error.
+        {
             bail!(
                 "failed to retrieve rust sysroot: {}",
                 String::from_utf8_lossy(&rustc_output.stderr)

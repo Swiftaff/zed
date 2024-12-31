@@ -128,6 +128,9 @@ pub enum ExtensionOperation {
 pub enum Event {
     ExtensionsUpdated,
     StartedReloading,
+    DevExtensionInstalling(Arc<str>),
+    DevExtensionInstallFailed(Arc<str>),
+    DevExtensionInstallSuccess,
     ExtensionInstalled(Arc<str>),
     ExtensionFailedToLoad(Arc<str>),
 }
@@ -826,9 +829,22 @@ impl ExtensionStore {
 
         cx.spawn(move |this, mut cx| async move {
             let mut extension_manifest =
-                ExtensionManifest::load(fs.clone(), &extension_source_path).await?;
-            let extension_id = extension_manifest.id.clone();
+                ExtensionManifest::load(fs.clone(), &extension_source_path)
+                    .await
+                    .or_else(|e| {
+                        this.update(&mut cx, |_, cx| {
+                            let arc_string = Arc::new("ERROR: invalid manifest".to_string());
+                            let arc_str: Arc<str> = Arc::from((&*arc_string).to_string());
+                            cx.emit(Event::DevExtensionInstallFailed(arc_str));
+                        })?;
+                        Err(e)
+                    })?;
 
+            let extension_id = extension_manifest.id.clone();
+            this.update(&mut cx, |_, cx| {
+                let arc_str: Arc<str> = extension_manifest.id.clone();
+                cx.emit(Event::DevExtensionInstalling(arc_str));
+            })?;
             if !this.update(&mut cx, |this, cx| {
                 match this.outstanding_operations.entry(extension_id.clone()) {
                     btree_map::Entry::Occupied(_) => return false,
@@ -866,7 +882,14 @@ impl ExtensionStore {
                             .await
                     }
                 })
-                .await?;
+                .await
+                .or_else(|e| {
+                    this.update(&mut cx, |_, cx| {
+                        let arc_str: Arc<str> = Arc::from(e.to_string());
+                        cx.emit(Event::DevExtensionInstallFailed(arc_str));
+                    })?;
+                    Err(e)
+                })?;
 
             let output_path = &extensions_dir.join(extension_id.as_ref());
             if let Some(metadata) = fs.metadata(output_path).await? {
@@ -889,6 +912,9 @@ impl ExtensionStore {
 
             this.update(&mut cx, |this, cx| this.reload(None, cx))?
                 .await;
+            this.update(&mut cx, |_, cx| {
+                cx.emit(Event::DevExtensionInstallSuccess);
+            })?;
             Ok(())
         })
     }

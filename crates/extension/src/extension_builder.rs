@@ -77,7 +77,6 @@ impl ExtensionBuilder {
         extension_manifest: &mut ExtensionManifest,
         options: CompileExtensionOptions,
     ) -> Result<()> {
-        dbg!("compile_extension");
         populate_defaults(extension_manifest, extension_dir)?;
 
         if extension_dir.is_relative() {
@@ -121,7 +120,6 @@ impl ExtensionBuilder {
         manifest: &mut ExtensionManifest,
         options: CompileExtensionOptions,
     ) -> Result<(), anyhow::Error> {
-        dbg!("compile_rust_extension");
         self.install_rust_wasm_target_if_needed()?;
         let adapter_bytes = self.install_wasi_preview1_adapter_if_needed().await?;
 
@@ -348,14 +346,13 @@ impl ExtensionBuilder {
     }
 
     fn install_rust_wasm_target_if_needed(&self) -> Result<()> {
-        dbg!("install_rust_wasm_target_if_needed");
         let rustc_output = util::command::new_std_command("rustc")
             .arg("--print")
             .arg("sysroot")
             .output()
             .context("failed to run rustc")?;
-        //TEMPORARY TEST - fail dev extension loading
-        //if !rustc_output.status.success()
+        if !rustc_output.status.success()
+        //TEMPORARY TEST - comment out above line to fail dev extension loading
         {
             bail!(
                 "failed to retrieve rust sysroot: {}",

@@ -129,7 +129,7 @@ pub enum Event {
     ExtensionsUpdated,
     StartedReloading,
     DevExtensionInstalling(Arc<str>),
-    DevExtensionInstallFail(Arc<str>),
+    DevExtensionInstallFailed(Arc<str>),
     DevExtensionInstallSuccess,
     ExtensionInstalled(Arc<str>),
     ExtensionFailedToLoad(Arc<str>),
@@ -823,7 +823,6 @@ impl ExtensionStore {
         extension_source_path: PathBuf,
         cx: &mut ModelContext<Self>,
     ) -> Task<Result<()>> {
-        dbg!("install_dev_extension");
         let extensions_dir = self.extensions_dir();
         let fs = self.fs.clone();
         let builder = self.builder.clone();
@@ -836,7 +835,7 @@ impl ExtensionStore {
                         this.update(&mut cx, |_, cx| {
                             let arc_string = Arc::new("ERROR: invalid manifest".to_string());
                             let arc_str: Arc<str> = Arc::from((&*arc_string).to_string());
-                            cx.emit(Event::DevExtensionInstallFail(arc_str));
+                            cx.emit(Event::DevExtensionInstallFailed(arc_str));
                         })?;
                         Err(e)
                     })?;
@@ -887,7 +886,7 @@ impl ExtensionStore {
                 .or_else(|e| {
                     this.update(&mut cx, |_, cx| {
                         let arc_str: Arc<str> = Arc::from(e.to_string());
-                        cx.emit(Event::DevExtensionInstallFail(arc_str));
+                        cx.emit(Event::DevExtensionInstallFailed(arc_str));
                     })?;
                     Err(e)
                 })?;
@@ -913,6 +912,9 @@ impl ExtensionStore {
 
             this.update(&mut cx, |this, cx| this.reload(None, cx))?
                 .await;
+            this.update(&mut cx, |_, cx| {
+                cx.emit(Event::DevExtensionInstallSuccess);
+            })?;
             Ok(())
         })
     }

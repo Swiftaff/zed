@@ -833,7 +833,7 @@ impl ExtensionStore {
                     .await
                     .or_else(|e| {
                         this.update(&mut cx, |_, cx| {
-                            let arc_string = Arc::new("ERROR: invalid manifest".to_string());
+                            let arc_string = Arc::new("invalid manifest".to_string());
                             let arc_str: Arc<str> = Arc::from((&*arc_string).to_string());
                             cx.emit(Event::DevExtensionInstallFailed(arc_str));
                         })?;

@@ -24,9 +24,10 @@ use settings::Settings;
 use theme::ThemeSettings;
 use ui::{prelude::*, CheckboxWithLabel, ContextMenu, PopoverMenu, ToggleButton, Tooltip};
 use vim_mode_setting::VimModeSetting;
+use workspace::notifications::NotificationId;
 use workspace::{
     item::{Item, ItemEvent},
-    Workspace, WorkspaceId,
+    Toast, Workspace, WorkspaceId,
 };
 
 use crate::components::{ExtensionCard, FeatureUpsell};
@@ -113,13 +114,6 @@ pub enum ExtensionStatus {
     Removing,
 }
 
-#[derive(Clone, PartialEq)]
-pub enum DevExtensionInstallStatus {
-    None,
-    Installing(Arc<str>),
-    Failed(Arc<str>),
-}
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 enum ExtensionFilter {
     All,
@@ -189,7 +183,6 @@ pub struct ExtensionsPage {
     workspace: WeakView<Workspace>,
     list: UniformListScrollHandle,
     is_fetching_extensions: bool,
-    is_installing_dev_extension: DevExtensionInstallStatus,
     filter: ExtensionFilter,
     remote_extension_entries: Vec<ExtensionMetadata>,
     dev_extension_entries: Vec<Arc<ExtensionManifest>>,
@@ -210,15 +203,12 @@ impl ExtensionsPage {
                 cx.observe(&store, |_, _, cx| cx.notify()),
                 cx.subscribe(&store, move |this, _, event, cx| match event {
                     extension_host::Event::ExtensionsUpdated => this.fetch_extensions_debounced(cx),
-                    extension_host::Event::DevExtensionInstalling(message) => this
-                        .is_installing_dev_extension(DevExtensionInstallStatus::Installing(
-                            message.clone(),
-                        )),
+                    extension_host::Event::DevExtensionInstalling(m) => this
+                        .on_dev_extension_install(workspace_handle.clone(), cx, &m.clone(), false),
+                    extension_host::Event::DevExtensionInstallSuccess => this
+                        .on_dev_extension_install(workspace_handle.clone(), cx, &"Complete", false),
                     extension_host::Event::DevExtensionInstallFailed(e) => this
-                        .is_installing_dev_extension(DevExtensionInstallStatus::Failed(e.clone())),
-                    extension_host::Event::DevExtensionInstallSuccess => {
-                        this.is_installing_dev_extension(DevExtensionInstallStatus::None)
-                    }
+                        .on_dev_extension_install(workspace_handle.clone(), cx, &e.clone(), true),
                     extension_host::Event::ExtensionInstalled(extension_id) => {
                         this.on_extension_installed(workspace_handle.clone(), extension_id, cx)
                     }
@@ -237,7 +227,6 @@ impl ExtensionsPage {
                 workspace: workspace.weak_handle(),
                 list: UniformListScrollHandle::new(),
                 is_fetching_extensions: false,
-                is_installing_dev_extension: DevExtensionInstallStatus::None,
                 filter: ExtensionFilter::All,
                 dev_extension_entries: Vec::new(),
                 filtered_remote_extension_indices: Vec::new(),
@@ -252,8 +241,37 @@ impl ExtensionsPage {
             this
         })
     }
-    fn is_installing_dev_extension(&mut self, status: DevExtensionInstallStatus) {
-        self.is_installing_dev_extension = status;
+
+    fn on_dev_extension_install(
+        &mut self,
+        workspace_handle: WeakView<Workspace>,
+        cx: &mut ViewContext<Self>,
+        message: &str,
+        is_error: bool,
+    ) {
+        workspace_handle
+            .update(cx, |workspace_data, cx| {
+                if is_error {
+                    let t = Toast::new(
+                        NotificationId::unique::<InstallDevExtension>(),
+                        format!("ERROR Installing Dev Extension: {}", message),
+                    )
+                    .on_click("Read more about creating Dev Extensions", {
+                        move |cx| {
+                            cx.open_url("https://zed.dev/docs/extensions/developing-extensions");
+                        }
+                    });
+                    workspace_data.show_toast(t, cx);
+                } else {
+                    let t = Toast::new(
+                        NotificationId::unique::<InstallDevExtension>(),
+                        format!("Installing Dev Extension: {}", message),
+                    )
+                    .autohide();
+                    workspace_data.show_toast(t, cx);
+                }
+            })
+            .ok();
     }
 
     fn on_extension_installed(
@@ -391,95 +409,19 @@ impl ExtensionsPage {
             0
         };
 
-        //Display dev extension loading card before main extension cards
-        let dev_extension_installing_count =
-            if self.is_installing_dev_extension != DevExtensionInstallStatus::None {
-                1
-            } else {
-                0
-            };
         range
             .map(|ix| {
-                if ix == 0 && dev_extension_installing_count == 1 {
-                    match self.is_installing_dev_extension.clone() {
-                        DevExtensionInstallStatus::Installing(message) => {
-                            self.render_dev_extension_loading(message)
-                        }
-                        DevExtensionInstallStatus::Failed(e) => {
-                            self.render_dev_extension_failed(e, cx)
-                        }
-                        _ => {
-                            let arc_string = Arc::new("ERROR: unknown".to_string());
-                            let arc_str: Arc<str> = Arc::from((&*arc_string).to_string());
-                            self.render_dev_extension_failed(arc_str, cx)
-                        }
-                    }
-                } else if ix < dev_extension_entries_len {
+                if ix < dev_extension_entries_len {
                     let extension = &self.dev_extension_entries[ix];
                     self.render_dev_extension(extension, cx)
                 } else {
                     let mut index = ix - dev_extension_entries_len;
-                    //avoid list indexing issue with changeover from dev extension loading card to a fully loaded card
-                    if index > 0 {
-                        index = index - dev_extension_installing_count
-                    };
                     let extension_ix = self.filtered_remote_extension_indices[index];
                     let extension = &self.remote_extension_entries[extension_ix];
                     self.render_remote_extension(extension, cx)
                 }
             })
             .collect()
-    }
-
-    fn render_dev_extension_loading(&self, message: Arc<str>) -> ExtensionCard {
-        ExtensionCard::new()
-            .child(h_flex().justify_between().child(
-                Headline::new("Installing Dev Extension...".to_string()).size(HeadlineSize::Medium),
-            ))
-            .child(Headline::new(message).size(HeadlineSize::Small))
-    }
-
-    fn render_dev_extension_failed(
-        &self,
-        message: Arc<str>,
-        cx: &mut ViewContext<Self>,
-    ) -> ExtensionCard {
-        ExtensionCard::new()
-            .child(
-                h_flex()
-                    .justify_between()
-                    .child(
-                        Headline::new("Installing Dev Extension...".to_string())
-                            .size(HeadlineSize::Medium),
-                    )
-                    .child(
-                        Button::new(SharedString::from("close"), "Close")
-                            .on_click(|_, cx| {
-                                ExtensionStore::global(cx).update(cx, |_, cx| {
-                                    cx.emit(extension_host::Event::DevExtensionInstallSuccess);
-                                    cx.notify();
-                                });
-                            })
-                            .color(Color::Accent)
-                            .tooltip(move |cx| Tooltip::text("close message", cx)),
-                    ),
-            )
-            .child(Headline::new(message).size(HeadlineSize::Small))
-            .child(
-                Button::new(
-                    SharedString::from("developing_extensions_link"),
-                    "More information on developing extensions",
-                )
-                .color(Color::Accent)
-                .on_click(cx.listener({
-                    move |_, _, cx| {
-                        cx.open_url("https://zed.dev/docs/extensions/developing-extensions");
-                    }
-                }))
-                .tooltip(move |cx| {
-                    Tooltip::text("https://zed.dev/docs/extensions/developing-extensions", cx)
-                }),
-            )
     }
 
     fn render_dev_extension(
@@ -1201,9 +1143,6 @@ impl Render for ExtensionsPage {
                 let mut count = self.filtered_remote_extension_indices.len();
                 if self.filter.include_dev_extensions() {
                     count += self.dev_extension_entries.len();
-                }
-                if self.is_installing_dev_extension != DevExtensionInstallStatus::None {
-                    count += 1;
                 }
 
                 if count == 0 {

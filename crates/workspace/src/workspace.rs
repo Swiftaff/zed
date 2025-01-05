@@ -913,6 +913,25 @@ impl Workspace {
         });
         cx.subscribe(&center_pane, Self::handle_pane_event).detach();
 
+        /*
+                let extension_store = cx.new_view(|cx| {
+                    let mut extension_store = ExtensionStore::new(
+                        paths::extensions_dir().clone(),
+                        None,
+                        extension_host_proxy,
+                        fs,
+                        client.http_client().clone(),
+                        client.http_client().clone(),
+                        Some(client.telemetry().clone()),
+                        node_runtime,
+                        cx,
+                    );
+                    extension_store
+                });
+                cx.subscribe(&extension_store, Self::handle_extension_event)
+                    .detach();
+        */
+
         cx.focus_view(&center_pane);
         cx.emit(Event::PaneAdded(center_pane.clone()));
 
@@ -3145,7 +3164,24 @@ impl Workspace {
 
         self.serialize_workspace(cx);
     }
-
+    /*
+        fn handle_extension_event(
+            &mut self,
+            pane: View<Pane>,
+            event: &extension_host::Event,
+            cx: &mut ViewContext<Self>,
+        ) {
+            match event {
+                pane::Event::AddItem { item } => {
+                    item.added_to_pane(self, pane, cx);
+                    cx.emit(Event::ItemAdded {
+                        item: item.boxed_clone(),
+                    });
+                }
+                _ => (),
+            }
+        }
+    */
     pub fn unfollow_in_pane(
         &mut self,
         pane: &View<Pane>,

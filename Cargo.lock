@@ -4378,6 +4378,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "extensions_no_ui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "client",
+ "collections",
+ "db",
+ "editor",
+ "extension_host",
+ "extensions_ui",
+ "fs",
+ "fuzzy",
+ "gpui",
+ "language",
+ "num-format",
+ "picker",
+ "project",
+ "release_channel",
+ "semantic_version",
+ "serde",
+ "settings",
+ "smallvec",
+ "telemetry",
+ "theme",
+ "ui",
+ "util",
+ "vim_mode_setting",
+ "workspace",
+ "zed_actions",
+]
+
+[[package]]
 name = "extensions_ui"
 version = "0.1.0"
 dependencies = [
@@ -16235,6 +16267,7 @@ dependencies = [
  "env_logger 0.11.6",
  "extension",
  "extension_host",
+ "extensions_no_ui",
  "extensions_ui",
  "feature_flags",
  "feedback",

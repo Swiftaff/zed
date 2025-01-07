@@ -55,6 +55,7 @@ pub fn init(cx: &mut AppContext) {
                 }
             })
             .register_action(move |workspace, _: &InstallDevExtension, cx| {
+                dbg!("UI register_action");
                 let store = ExtensionStore::global(cx);
                 let prompt = workspace.prompt_for_open_path(
                     gpui::PathPromptOptions {
@@ -415,7 +416,7 @@ impl ExtensionsPage {
                     let extension = &self.dev_extension_entries[ix];
                     self.render_dev_extension(extension, cx)
                 } else {
-                    let mut index = ix - dev_extension_entries_len;
+                    let index = ix - dev_extension_entries_len;
                     let extension_ix = self.filtered_remote_extension_indices[index];
                     let extension = &self.remote_extension_entries[extension_ix];
                     self.render_remote_extension(extension, cx)
@@ -1075,7 +1076,7 @@ impl Render for ExtensionsPage {
                             .justify_between()
                             .child(Headline::new("Extensions").size(HeadlineSize::XLarge))
                             .child(
-                                Button::new("install-dev-extension", "Install Dev Extension")
+                                Button::new("install-dev-extension", "Install Dev Extension 1")
                                     .style(ButtonStyle::Filled)
                                     .size(ButtonSize::Large)
                                     .on_click(|_event, cx| {

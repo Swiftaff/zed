@@ -507,7 +507,6 @@ fn main() {
         welcome::init(cx);
         settings_ui::init(cx);
         extensions_ui::init(cx);
-        extensions_no_ui::init(cx);
         zeta::init(cx);
 
         cx.observe_global::<SettingsStore>({

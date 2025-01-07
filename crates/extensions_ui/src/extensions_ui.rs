@@ -10,10 +10,10 @@ use std::{ops::Range, sync::Arc};
 use client::ExtensionMetadata;
 use collections::{BTreeMap, BTreeSet};
 use editor::{Editor, EditorElement, EditorStyle};
-use extension_host::{ExtensionManifest, ExtensionOperation, ExtensionStore};
+use extension_host::{ExtensionManifest, ExtensionOperation, ExtensionStore, InstallDevExtension};
 use fuzzy::{match_strings, StringMatchCandidate};
 use gpui::{
-    actions, uniform_list, Action, AppContext, ClipboardItem, EventEmitter, Flatten, FocusableView,
+    uniform_list, Action, AppContext, ClipboardItem, EventEmitter, Flatten, FocusableView,
     InteractiveElement, KeyContext, ParentElement, Render, Styled, Task, TextStyle,
     UniformListScrollHandle, View, ViewContext, VisualContext, WeakView, WindowContext,
 };
@@ -24,18 +24,15 @@ use settings::Settings;
 use theme::ThemeSettings;
 use ui::{prelude::*, CheckboxWithLabel, ContextMenu, PopoverMenu, ToggleButton, Tooltip};
 use vim_mode_setting::VimModeSetting;
-use workspace::notifications::NotificationId;
 use workspace::{
     item::{Item, ItemEvent},
-    Toast, Workspace, WorkspaceId,
+    Workspace, WorkspaceId,
 };
 
 use crate::components::{ExtensionCard, FeatureUpsell};
 use crate::extension_version_selector::{
     ExtensionVersionSelector, ExtensionVersionSelectorDelegate,
 };
-
-actions!(zed, [InstallDevExtension]);
 
 pub fn init(cx: &mut AppContext) {
     cx.observe_new_views(move |workspace: &mut Workspace, cx| {
@@ -55,7 +52,6 @@ pub fn init(cx: &mut AppContext) {
                 }
             })
             .register_action(move |workspace, _: &InstallDevExtension, cx| {
-                dbg!("UI register_action");
                 let store = ExtensionStore::global(cx);
                 let prompt = workspace.prompt_for_open_path(
                     gpui::PathPromptOptions {
@@ -203,14 +199,10 @@ impl ExtensionsPage {
             let subscriptions = [
                 cx.observe(&store, |_, _, cx| cx.notify()),
                 cx.subscribe(&store, move |this, _, event, cx| match event {
-                    extension_host::Event::ExtensionsUpdated => this.fetch_extensions_debounced(cx),
-                    extension_host::Event::DevExtensionInstalling(m) => this
-                        .on_dev_extension_install(workspace_handle.clone(), cx, &m.clone(), false),
-                    extension_host::Event::DevExtensionInstallSuccess => this
-                        .on_dev_extension_install(workspace_handle.clone(), cx, &"Complete", false),
-                    extension_host::Event::DevExtensionInstallFailed(e) => this
-                        .on_dev_extension_install(workspace_handle.clone(), cx, &e.clone(), true),
-                    extension_host::Event::ExtensionInstalled(extension_id) => {
+                    extension_host::ExtensionEvent::ExtensionsUpdated => {
+                        this.fetch_extensions_debounced(cx)
+                    }
+                    extension_host::ExtensionEvent::ExtensionInstalled(extension_id) => {
                         this.on_extension_installed(workspace_handle.clone(), extension_id, cx)
                     }
                     _ => {}
@@ -241,38 +233,6 @@ impl ExtensionsPage {
             this.fetch_extensions(None, cx);
             this
         })
-    }
-
-    fn on_dev_extension_install(
-        &mut self,
-        workspace_handle: WeakView<Workspace>,
-        cx: &mut ViewContext<Self>,
-        message: &str,
-        is_error: bool,
-    ) {
-        workspace_handle
-            .update(cx, |workspace_data, cx| {
-                if is_error {
-                    let t = Toast::new(
-                        NotificationId::unique::<InstallDevExtension>(),
-                        format!("ERROR Installing Dev Extension: {}", message),
-                    )
-                    .on_click("Read more about creating Dev Extensions", {
-                        move |cx| {
-                            cx.open_url("https://zed.dev/docs/extensions/developing-extensions");
-                        }
-                    });
-                    workspace_data.show_toast(t, cx);
-                } else {
-                    let t = Toast::new(
-                        NotificationId::unique::<InstallDevExtension>(),
-                        format!("Installing Dev Extension: {}", message),
-                    )
-                    .autohide();
-                    workspace_data.show_toast(t, cx);
-                }
-            })
-            .ok();
     }
 
     fn on_extension_installed(
@@ -1076,7 +1036,7 @@ impl Render for ExtensionsPage {
                             .justify_between()
                             .child(Headline::new("Extensions").size(HeadlineSize::XLarge))
                             .child(
-                                Button::new("install-dev-extension", "Install Dev Extension 1")
+                                Button::new("install-dev-extension", "Install Dev Extension")
                                     .style(ButtonStyle::Filled)
                                     .size(ButtonSize::Large)
                                     .on_click(|_event, cx| {

@@ -22,6 +22,7 @@ use client::{
 use collections::{hash_map, HashMap, HashSet};
 use derive_more::{Deref, DerefMut};
 use dock::{Dock, DockPosition, Panel, PanelButtons, PanelHandle, RESIZE_HANDLE_SIZE};
+use extension_host::{ExtensionEvent, ExtensionStore, InstallDevExtension};
 use futures::{
     channel::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -913,24 +914,20 @@ impl Workspace {
         });
         cx.subscribe(&center_pane, Self::handle_pane_event).detach();
 
-        /*
-                let extension_store = cx.new_view(|cx| {
-                    let mut extension_store = ExtensionStore::new(
-                        paths::extensions_dir().clone(),
-                        None,
-                        extension_host_proxy,
-                        fs,
-                        client.http_client().clone(),
-                        client.http_client().clone(),
-                        Some(client.telemetry().clone()),
-                        node_runtime,
-                        cx,
-                    );
-                    extension_store
-                });
-                cx.subscribe(&extension_store, Self::handle_extension_event)
-                    .detach();
-        */
+        let store = ExtensionStore::global(cx);
+        cx.subscribe(&store, |workspace, _, event, cx| match event {
+            ExtensionEvent::DevExtensionInstalling(m) => {
+                on_dev_extension_install(workspace, cx, &m.clone(), false)
+            }
+            ExtensionEvent::DevExtensionInstallSuccess => {
+                on_dev_extension_install(workspace, cx, &"Complete", false)
+            }
+            ExtensionEvent::DevExtensionInstallFailed(e) => {
+                on_dev_extension_install(workspace, cx, &e.clone(), true);
+            }
+            _ => {}
+        })
+        .detach();
 
         cx.focus_view(&center_pane);
         cx.emit(Event::PaneAdded(center_pane.clone()));
@@ -3164,24 +3161,7 @@ impl Workspace {
 
         self.serialize_workspace(cx);
     }
-    /*
-        fn handle_extension_event(
-            &mut self,
-            pane: View<Pane>,
-            event: &extension_host::Event,
-            cx: &mut ViewContext<Self>,
-        ) {
-            match event {
-                pane::Event::AddItem { item } => {
-                    item.added_to_pane(self, pane, cx);
-                    cx.emit(Event::ItemAdded {
-                        item: item.boxed_clone(),
-                    });
-                }
-                _ => (),
-            }
-        }
-    */
+
     pub fn unfollow_in_pane(
         &mut self,
         pane: &View<Pane>,
@@ -6276,6 +6256,37 @@ pub fn move_active_item(
             );
         });
     });
+}
+
+fn on_dev_extension_install(
+    workspace: &mut Workspace,
+    cx: &mut ViewContext<Workspace>,
+    message: &str,
+    is_error: bool,
+) {
+    //workspace_handle
+    //.update(cx, |workspace_data, cx| {
+    if is_error {
+        let t = Toast::new(
+            NotificationId::unique::<InstallDevExtension>(),
+            format!("ERROR Installing Dev Extension: {}", message),
+        )
+        .on_click("Read more about creating Dev Extensions", {
+            move |cx| {
+                cx.open_url("https://zed.dev/docs/extensions/developing-extensions");
+            }
+        });
+        workspace.show_toast(t, cx);
+    } else {
+        let t = Toast::new(
+            NotificationId::unique::<InstallDevExtension>(),
+            format!("Installing Dev Extension: {}", message),
+        )
+        .autohide();
+        workspace.show_toast(t, cx);
+    }
+    //})
+    //.ok();
 }
 
 #[cfg(test)]

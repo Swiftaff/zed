@@ -3,6 +3,7 @@ use crate::{
     ExtensionIndexThemeEntry, ExtensionManifest, ExtensionSettings, ExtensionStore,
     GrammarManifestEntry, SchemaVersion, RELOAD_DEBOUNCE_DURATION,
 };
+use anyhow::Ok;
 use async_compression::futures::bufread::GzipEncoder;
 use collections::BTreeMap;
 use extension::ExtensionHostProxy;
@@ -26,6 +27,7 @@ use std::{
 };
 use theme::ThemeRegistry;
 use util::test::temp_tree;
+use workspace::{ItemSettings, PreviewTabsSettings, TabBarSettings, Workspace, WorkspaceSettings};
 
 #[cfg(test)]
 #[ctor::ctor]
@@ -758,6 +760,89 @@ async fn test_extension_store_with_test_extension(cx: &mut TestAppContext) {
 
     // The old language server directory has been cleaned up.
     assert!(fs.metadata(&expected_server_path).await.unwrap().is_none());
+}
+
+#[gpui::test]
+/// WIP test - this test is currently failing.
+/// cargo test -p extension_host test_dev_extension_install_notification
+async fn test_dev_extension_install_notification_fail_manifest(cx: &mut TestAppContext) {
+    init_test(cx);
+
+    //define a dev extension dir containing a manifest with an invalid key
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(
+        "/my-repo",
+        json!({
+            "my_dev_extension": {},
+            "extension.toml": r#"
+                invalid_manifest_key = "invalid"
+            "#
+        }),
+    )
+    .await;
+
+    //set up workspace
+    let project = Project::test(fs.clone(), [], cx).await;
+    cx.update(|cx| {
+        WorkspaceSettings::register(cx);
+        ItemSettings::register(cx);
+        PreviewTabsSettings::register(cx);
+        TabBarSettings::register(cx);
+    });
+    let (workspace, cx) = cx.add_window_view(|cx| Workspace::test_new(project.clone(), cx));
+    let extension_path = PathBuf::from("/my-repo/my_dev_extension");
+
+    //create an empty extension store
+    let http_client = FakeHttpClient::with_200_response();
+    let proxy = Arc::new(ExtensionHostProxy::new());
+    let node_runtime = NodeRuntime::unavailable();
+    let store = cx.new_model(|cx| {
+        ExtensionStore::new(
+            PathBuf::from("/the-extension-dir"),
+            None,
+            proxy.clone(),
+            fs.clone(),
+            http_client.clone(),
+            http_client.clone(),
+            None,
+            node_runtime.clone(),
+            cx,
+        )
+    });
+
+    //check workspace receives ExtensionEvent::DevExtensionInstallFailed
+    //from the installation below
+    workspace.update(cx, |_, cx| {
+        cx.subscribe(&store, |_, _, event, _| match event {
+            ExtensionEvent::DevExtensionInstalling(_m) => {
+                //TODO
+            }
+            ExtensionEvent::DevExtensionInstallSuccess => {
+                //TODO
+            }
+            ExtensionEvent::DevExtensionInstallFailed(e) => {
+                //dbg!(e);
+            }
+            _ => {}
+        })
+        .detach();
+    });
+
+    //attempt to install the dev extension
+    //equivalent to clicking 'Install Dev Extension' button in UI
+    //or via the command palette.
+    //This will trigger one or more Events which will display toast notifications
+    cx.update(|cx| {
+        cx.spawn(|mut cx| async move {
+            store
+                .update(&mut cx, |store, cx| {
+                    store.install_dev_extension(extension_path, cx)
+                })
+                .ok();
+            Some(())
+        })
+        .detach();
+    });
 }
 
 fn init_test(cx: &mut TestAppContext) {
